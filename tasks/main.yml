@@ -4,11 +4,11 @@
   vars:
     params:
       files:
-        - '{{ansible_distribution}}.yml'
-        - '{{ansible_os_family}}.yml'
+        - "{{ansible_distribution}}.yml"
+        - "{{ansible_os_family}}.yml"
         - main.yml
       paths:
-        - 'vars'
+        - "vars"
 
 - include_tasks: setup-RedHat.yml
   when: ansible_os_family == 'RedHat'
@@ -17,6 +17,7 @@
   when: ansible_os_family == 'Debian'
 
 - name: Install Docker packages.
+  become: true
   package:
     name: "{{ docker_packages }}"
     state: "{{ docker_packages_state }}"
@@ -25,6 +26,7 @@
   when: "ansible_version.full is version_compare('2.12', '<') or ansible_os_family not in ['RedHat', 'Debian']"
 
 - name: Install Docker packages (with downgrade option).
+  become: true
   package:
     name: "{{ docker_packages }}"
     state: "{{ docker_packages_state }}"
@@ -34,6 +36,7 @@
   when: "ansible_version.full is version_compare('2.12', '>=') and ansible_os_family in ['RedHat', 'Debian']"
 
 - name: Install docker-compose plugin.
+  become: true
   package:
     name: "{{ docker_compose_package }}"
     state: "{{ docker_compose_package_state }}"
@@ -42,6 +45,7 @@
   when: "docker_install_compose_plugin | bool == true and (ansible_version.full is version_compare('2.12', '<') or ansible_os_family not in ['RedHat', 'Debian'])"
 
 - name: Install docker-compose-plugin (with downgrade option).
+  become: true
   package:
     name: "{{ docker_compose_package }}"
     state: "{{ docker_compose_package_state }}"
@@ -83,7 +87,7 @@
   getent:
     database: group
     key: docker
-    split: ':'
+    split: ":"
   when: docker_users | length > 0
 
 - name: Check if there are any users to add to the docker group.
@@ -91,8 +95,17 @@
     at_least_one_user_to_modify: true
   when:
     - docker_users | length > 0
-    - item not in ansible_facts.getent_group["docker"][2]
+    - docker_user not in ansible_facts.getent_group["docker"][2]
+  loop_control:
+    loop_var: docker_user
   with_items: "{{ docker_users }}"
 
 - include_tasks: docker-users.yml
   when: at_least_one_user_to_modify is defined
+
+- name: Set `/var/run/docker.sock` right permissions
+  become: true
+  ansible.builtin.file:
+    path: /var/run/docker.sock
+    mode: "0666"
+  when: ansible_os_family == 'Debian'
